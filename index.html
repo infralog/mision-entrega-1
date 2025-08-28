@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Misión Entrega: El Juego del Camioncito</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-template-rows: repeat(12, 1fr);
+            width: 90vw;
+            height: 90vw;
+            max-width: 500px;
+            max-height: 500px;
+            border: 2px solid #334155;
+            position: relative;
+            overflow: hidden;
+            background-color: #f3e9d2; /* Color base cremita */
+        }
+        .grid-cell {
+            width: 100%;
+            height: 100%;
+        }
+        .street {
+            background-color: #6b7280; /* Color de la calle gris oscuro */
+            position: relative; /* Necesario para las líneas */
+        }
+        .grass {
+             background-color: #f3e9d2; /* Color cremita */
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             font-size: clamp(1rem, 3.5vw, 1.5rem);
+        }
+        /* Estilo para las líneas horizontales */
+        .street-horizontal::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 4%; /* Grosor de la línea */
+            background: repeating-linear-gradient(
+                to right,
+                #f3e9d2, /* Color de la línea */
+                #f3e9d2 40%, /* Largo del trazo */
+                transparent 40%,
+                transparent 100% /* Espacio */
+            );
+            background-size: 25% 100%;
+            transform: translateY(-50%);
+        }
+        /* Estilo para las líneas verticales */
+        .street-vertical::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 4%; /* Grosor de la línea */
+            background: repeating-linear-gradient(
+                to bottom,
+                #f3e9d2, /* Color de la línea */
+                #f3e9d2 40%, /* Largo del trazo */
+                transparent 40%,
+                transparent 100% /* Espacio */
+            );
+            background-size: 100% 25%;
+            transform: translateX(-50%);
+        }
+        .game-object {
+            width: calc(100% / 12);
+            height: calc(100% / 12);
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(1.2rem, 4vw, 1.8rem);
+            transition: top 0.1s linear, left 0.1s linear;
+            will-change: top, left;
+            z-index: 10;
+        }
+        #truck .package-on-board {
+            position: absolute;
+            top: -50%;
+            font-size: 0.8em;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        #truck.has-package .package-on-board {
+            opacity: 1;
+        }
+        .control-button {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 9999px;
+            font-size: 2rem;
+            cursor: pointer;
+            user-select: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .control-button:active {
+            transform: scale(0.95);
+            background-color: #2563eb;
+        }
+        #message-box {
+            transition: opacity 0.5s, transform 0.5s;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-center justify-center min-h-screen p-4">
+
+    <main class="w-full max-w-5xl mx-auto flex flex-col items-center">
+        <div class="w-full max-w-lg text-center mb-6">
+            <h1 class="text-3xl md-text-4xl font-bold text-blue-600">Misión Entrega 🚚</h1>
+            <p class="text-slate-600 mt-1">¡Cuidado con el tráfico! Recoge el paquete 📦 y llévalo a la casa 🏠.</p>
+        </div>
+
+        <div class="flex flex-col lg:flex-row items-center justify-center gap-8 w-full">
+            <!-- Game Board -->
+            <div id="game-container" class="relative flex-shrink-0">
+                <div id="game-board" class="game-board rounded-lg shadow-lg">
+                    <!-- El mapa y los objetos se inyectarán aquí -->
+                </div>
+                <div id="message-box" class="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-white p-4 rounded-lg opacity-0 pointer-events-none transform scale-110">
+                    <div id="message-text" class="text-4xl font-bold text-center"></div>
+                </div>
+            </div>
+
+            <!-- Game Info & Controls -->
+            <div class="flex flex-col items-center gap-4 w-full max-w-xs lg:max-w-none">
+                <div class="bg-white p-4 rounded-lg shadow-md text-center w-48">
+                    <h2 class="text-lg font-semibold text-slate-500">ENTREGAS</h2>
+                    <p id="score" class="text-5xl font-bold text-blue-600">0</p>
+                </div>
+
+                <button id="restart-button" class="w-48 bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 transition-colors">
+                    Nuevo Mapa
+                </button>
+                
+                <!-- Mobile Controls -->
+                <div class="grid grid-cols-3 gap-2 md:hidden">
+                    <div></div> <div id="up-button" class="control-button">↑</div> <div></div>
+                    <div id="left-button" class="control-button">←</div> <div id="down-button" class="control-button">↓</div> <div id="right-button" class="control-button">→</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Game elements
+        const board = document.getElementById('game-board');
+        const scoreElement = document.getElementById('score');
+        const restartButton = document.getElementById('restart-button');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const upButton = document.getElementById('up-button'), downButton = document.getElementById('down-button'), leftButton = document.getElementById('left-button'), rightButton = document.getElementById('right-button');
+
+        // Game settings
+        const gridSize = 12;
+        const trafficCarCount = 5;
+        let score = 0;
+        let gameActive = false;
+        let firstMoveMade = false;
+        let map = [];
+        let traffic = [];
+        let gameLoopInterval = null;
+
+        // Game state
+        let truck = { x: 0, y: 0, element: null, hasPackage: false };
+        let packageObj = { x: 0, y: 0, element: null };
+        let house = { x: 0, y: 0, element: null };
+        let warehouse = { x: 0, y: 0, element: null };
+
+        // --- Map Generation ---
+        function generateMap() {
+            map = Array(gridSize).fill(0).map(() => Array(gridSize).fill(0));
+            for (let i = 2; i < gridSize; i += 3) {
+                for (let y = 0; y < gridSize; y++) map[y][i] = 1;
+                for (let x = 0; x < gridSize; x++) map[i][x] = 1;
+            }
+        }
+
+        function drawMap() {
+            board.innerHTML = '';
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    if (map[y][x] === 1) {
+                        cell.classList.add('street');
+                        const isHorizontal = y % 3 === 2;
+                        const isVertical = x % 3 === 2;
+                        if (isHorizontal) cell.classList.add('street-horizontal');
+                        if (isVertical) cell.classList.add('street-vertical');
+                    } else {
+                        cell.classList.add('grass');
+                        // Añadir árboles aleatoriamente
+                        if (Math.random() < 0.25) {
+                            cell.innerHTML = '🌳';
+                        }
+                    }
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        // --- Game Initialization ---
+        function createGameObject(emoji, id) {
+            const el = document.createElement('div');
+            if (id) el.id = id;
+            el.classList.add('game-object');
+            el.innerHTML = emoji;
+            board.appendChild(el);
+            return el;
+        }
+
+        function initGame() {
+            if (gameLoopInterval) clearInterval(gameLoopInterval);
+            generateMap();
+            drawMap();
+            
+            truck.element = createGameObject('🚚<span class="package-on-board">📦</span>', 'truck');
+            packageObj.element = createGameObject('📦', 'package');
+            house.element = createGameObject('🏠', 'house');
+            warehouse.element = createGameObject('🏢', 'warehouse');
+            
+            score = 0;
+            truck.hasPackage = false;
+            firstMoveMade = false;
+            updateScore();
+            
+            placeObjectsForNewRound();
+            
+            gameActive = true;
+            restartButton.textContent = 'Nuevo Mapa';
+            
+            render();
+            gameLoopInterval = setInterval(gameLoop, 400); 
+        }
+
+        // --- Object Placement ---
+        function getRandomStreetPosition() {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * gridSize);
+                y = Math.floor(Math.random() * gridSize);
+            } while (map[y][x] !== 1);
+            return { x, y };
+        }
+
+        function isSamePosition(pos1, pos2) {
+            return pos1.x === pos2.x && pos1.y === pos2.y;
+        }
+
+        function getManhattanDistance(pos1, pos2) {
+            return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
+        }
+
+        function placeObjectsForNewRound() {
+            const occupiedPositions = [];
+
+            const warehousePos = getRandomStreetPosition();
+            occupiedPositions.push(warehousePos);
+            warehouse.x = warehousePos.x; warehouse.y = warehousePos.y;
+            packageObj.x = warehouse.x; packageObj.y = warehouse.y;
+
+            let housePos;
+            do {
+                housePos = getRandomStreetPosition();
+            } while (
+                isSamePosition(housePos, warehousePos) ||
+                getManhattanDistance(housePos, warehousePos) < 4 ||
+                housePos.x === warehousePos.x || housePos.y === warehousePos.y
+            );
+            occupiedPositions.push(housePos);
+            house.x = housePos.x; house.y = housePos.y;
+
+            let farthestPos = null;
+            let maxDist = -1;
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    if (map[y][x] === 1) {
+                        const currentPos = {x, y};
+                        if (!occupiedPositions.some(p => isSamePosition(p, currentPos))) {
+                            const dist = getManhattanDistance(currentPos, warehousePos);
+                            if (dist > maxDist) {
+                                maxDist = dist;
+                                farthestPos = currentPos;
+                            }
+                        }
+                    }
+                }
+            }
+            const truckPos = farthestPos;
+            occupiedPositions.push(truckPos);
+            truck.x = truckPos.x; truck.y = truckPos.y;
+            
+            packageObj.element.style.display = 'block';
+            truck.element.classList.remove('has-package');
+            truck.hasPackage = false;
+
+            traffic = [];
+            for (let i = 0; i < trafficCarCount; i++) {
+                let carPos;
+                do {
+                    carPos = getRandomStreetPosition();
+                } while (occupiedPositions.some(p => isSamePosition(p, carPos)));
+                occupiedPositions.push(carPos);
+                
+                const carElement = createGameObject('🚗', null);
+                traffic.push({ ...carPos, element: carElement, dx: 0, dy: 0 });
+            }
+        }
+
+        // --- Rendering ---
+        function render() {
+            if (!gameActive) return;
+            const updatePosition = (obj) => {
+                const sizePercentage = 100 / gridSize;
+                obj.element.style.top = `${obj.y * sizePercentage}%`;
+                obj.element.style.left = `${obj.x * sizePercentage}%`;
+            };
+            updatePosition(truck);
+            updatePosition(packageObj);
+            updatePosition(house);
+            updatePosition(warehouse);
+            traffic.forEach(updatePosition);
+        }
+
+        // --- Game Logic & Loop ---
+        function moveTruck(dx, dy) {
+            if (!gameActive) return;
+            const newX = truck.x + dx;
+            const newY = truck.y + dy;
+            if (newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize && map[newY][newX] === 1) {
+                if (!firstMoveMade) firstMoveMade = true;
+                truck.x = newX;
+                truck.y = newY;
+                checkCollisions();
+                render();
+            }
+        }
+
+        function moveTraffic() {
+            traffic.forEach(car => {
+                const possibleMoves = [];
+                const allDirections = [{dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}];
+
+                allDirections.forEach(dir => {
+                    const nextX = car.x + dir.dx;
+                    const nextY = car.y + dir.dy;
+                    const isNotReversing = !(dir.dx === -car.dx && dir.dy === -car.dy);
+                    if (nextX >= 0 && nextX < gridSize && nextY >= 0 && nextY < gridSize && map[nextY][nextX] === 1 && isNotReversing) {
+                        possibleMoves.push(dir);
+                    }
+                });
+
+                let nextMove;
+                if (possibleMoves.length === 0) {
+                    nextMove = { dx: -car.dx, dy: -car.dy };
+                } else {
+                    nextMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                }
+
+                car.dx = nextMove.dx;
+                car.dy = nextMove.dy;
+                car.x += car.dx;
+                car.y += car.dy;
+            });
+        }
+
+        function gameLoop() {
+            moveTraffic();
+            checkCollisions();
+            render();
+        }
+
+        function checkCollisions() {
+            if (!gameActive) return;
+
+            if (!truck.hasPackage && isSamePosition(truck, warehouse)) {
+                truck.hasPackage = true;
+                truck.element.classList.add('has-package');
+                packageObj.element.style.display = 'none';
+                showMessage('¡Paquete recogido!', 500);
+            }
+
+            if (truck.hasPackage && isSamePosition(truck, house)) {
+                score++;
+                updateScore();
+                showMessage('¡Entregado!', 1000);
+                gameActive = false;
+                clearInterval(gameLoopInterval);
+                setTimeout(initGame, 1200);
+            }
+            
+            if (firstMoveMade) {
+                for (const car of traffic) {
+                    if (isSamePosition(truck, car)) {
+                        gameActive = false;
+                        clearInterval(gameLoopInterval);
+                        showMessage('¡Choque!', 1000);
+                        setTimeout(initGame, 1200);
+                        return;
+                    }
+                }
+            }
+        }
+
+        function updateScore() {
+            scoreElement.textContent = score;
+        }
+
+        function showMessage(text, duration) {
+            messageText.textContent = text;
+            messageBox.style.opacity = '1';
+            messageBox.style.transform = 'scale(1)';
+            setTimeout(() => {
+                messageBox.style.opacity = '0';
+                messageBox.style.transform = 'scale(1.1)';
+            }, duration);
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':    case 'w': e.preventDefault(); moveTruck(0, -1); break;
+                case 'ArrowDown':  case 's': e.preventDefault(); moveTruck(0, 1);  break;
+                case 'ArrowLeft':  case 'a': e.preventDefault(); moveTruck(-1, 0); break;
+                case 'ArrowRight': case 'd': e.preventDefault(); moveTruck(1, 0);  break;
+            }
+        });
+
+        restartButton.addEventListener('click', initGame);
+        upButton.addEventListener('click', () => moveTruck(0, -1));
+        downButton.addEventListener('click', () => moveTruck(0, 1));
+        leftButton.addEventListener('click', () => moveTruck(-1, 0));
+        rightButton.addEventListener('click', () => moveTruck(1, 0));
+
+        // --- Start Game on Load ---
+        initGame();
+    </script>
+</body>
+</html>
